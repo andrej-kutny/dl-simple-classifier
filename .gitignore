@@ -1,7 +1,13 @@
+.claude/
+.devcontainer/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
+
+# Data
+data/
 
 # C extensions
 *.so
