@@ -200,7 +200,7 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
     # Train the model
     callbacks = [
         keras.callbacks.ModelCheckpoint(
-            filepath=os.path.join(model_dir, "checkpoint_{epoch}.keras"),
+            os.path.join(model_dir, "checkpoint_{epoch}.keras"),
             monitor='val_acc',
             mode='max',
             save_best_only=True),
