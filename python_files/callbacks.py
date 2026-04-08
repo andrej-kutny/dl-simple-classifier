@@ -18,7 +18,7 @@ def parse_epoch_data(data):
 
 
 def plot_accuracy(plt, epochs_range, train_acc, val_acc, best_checkpoints=None,
-                  label=None, color="green", fig_ax=None):
+                  label=None, train_color="lightgreen", val_color="green", fig_ax=None):
     """Generate accuracy convergence plot. Returns (fig, ax).
     Pass fig_ax=(fig, ax) to add series to an existing plot."""
     if fig_ax is None:
@@ -29,20 +29,20 @@ def plot_accuracy(plt, epochs_range, train_acc, val_acc, best_checkpoints=None,
     train_label = "Train accuracy" if label is None else f"{label} train"
     val_label = "Val accuracy" if label is None else f"{label} val"
 
-    ax.plot(epochs_range, train_acc, color=color, alpha=0.4, linestyle="--", label=train_label)
-    ax.plot(epochs_range, val_acc,   color=color, label=val_label)
+    ax.plot(epochs_range, train_acc, color=train_color, label=train_label)
+    ax.plot(epochs_range, val_acc,   color=val_color,   label=val_label)
 
     if best_checkpoints:
         best_epochs = [p[0] for p in best_checkpoints]
         best_accs   = [p[1] for p in best_checkpoints]
-        ax.plot(best_epochs, best_accs, color=color, linewidth=0.8,
+        ax.plot(best_epochs, best_accs, color=val_color, linewidth=0.8,
                 linestyle="--", label="Best checkpoints")
         for ckpt_epoch, ckpt_acc in best_checkpoints:
-            ax.plot(ckpt_epoch, ckpt_acc, "o", color=color, markersize=5)
+            ax.plot(ckpt_epoch, ckpt_acc, "o", color=val_color, markersize=5)
             ax.annotate(f"{ckpt_epoch}: {ckpt_acc:.5f}",
                         xy=(ckpt_epoch, ckpt_acc),
                         xytext=(4, 4), textcoords="offset points",
-                        fontsize=7, color=color)
+                        fontsize=7, color=val_color)
 
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Accuracy")
@@ -54,7 +54,7 @@ def plot_accuracy(plt, epochs_range, train_acc, val_acc, best_checkpoints=None,
 
 
 def plot_loss(plt, epochs_range, train_loss, val_loss,
-              label=None, color="red", fig_ax=None):
+              label=None, train_color="lightcoral", val_color="red", fig_ax=None):
     """Generate loss convergence plot. Returns (fig, ax).
     Pass fig_ax=(fig, ax) to add series to an existing plot."""
     if fig_ax is None:
@@ -65,8 +65,8 @@ def plot_loss(plt, epochs_range, train_loss, val_loss,
     train_label = "Train loss" if label is None else f"{label} train"
     val_label = "Val loss" if label is None else f"{label} val"
 
-    ax.plot(epochs_range, train_loss, color=color, alpha=0.4, linestyle="--", label=train_label)
-    ax.plot(epochs_range, val_loss,   color=color, label=val_label)
+    ax.plot(epochs_range, train_loss, color=train_color, label=train_label)
+    ax.plot(epochs_range, val_loss,   color=val_color,   label=val_label)
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Loss")
     ax.set_title("Loss convergence")
