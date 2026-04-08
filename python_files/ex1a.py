@@ -3,15 +3,13 @@ import argparse
 from datetime import datetime
 
 
-def run(source_dir, results_base, epochs, learning_rate):
+def run(source_dir, results_dir, epochs, learning_rate):
     import numpy as np
     import keras
     from keras import layers
     from tensorflow import data as tf_data
     import matplotlib.pyplot as plt
 
-    run_ts = datetime.now().strftime("%Y-%m-%d %H%M%S")
-    results_dir = os.path.join(results_base, run_ts)
     img_dir = os.path.join(results_dir, "img")
     model_dir = os.path.join(results_dir, "model")
     os.makedirs(img_dir, exist_ok=True)
@@ -189,21 +187,45 @@ def run(source_dir, results_base, epochs, learning_rate):
     print(f"Results saved to: {results_dir}")
 
 
+def positive_int(value):
+    v = int(value)
+    if v <= 0:
+        raise argparse.ArgumentTypeError(f"epochs must be a positive integer, got {value}")
+    return v
+
+
+def positive_float(value):
+    v = float(value)
+    if not (0.0 < v < 1.0):
+        raise argparse.ArgumentTypeError(f"learning-rate must be in (0, 1), got {value}")
+    return v
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a cat/dog classifier")
-    parser.add_argument("--source-dir", default="cat_and_dog_images",
+    parser.add_argument("-s", "--source-dir", default="cat_and_dog_images",
                         help="Path to the image dataset directory (default: cat_and_dog_images)")
-    parser.add_argument("--results-dir", default=os.path.join("data", "results"),
-                        help="Base directory for run outputs (default: data/results)")
-    parser.add_argument("--epochs", type=int, default=1,
-                        help="Number of training epochs (default: 1)")
-    parser.add_argument("--learning-rate", type=float, default=0.0001,
-                        help="Adam learning rate (default: 0.0001)")
+    parser.add_argument("-o", "--output-dir", default=None,
+                        help="Directory for run outputs (default: data/results/YYYY-MM-DD HHMMSS)")
+    parser.add_argument("-e", "--epochs", type=positive_int, default=1,
+                        help="Number of training epochs, must be > 0 (default: 1)")
+    parser.add_argument("-l", "--learning-rate", type=positive_float, default=0.0001,
+                        help="Adam learning rate, must be in (0, 1) (default: 0.0001)")
     args = parser.parse_args()
+
+    if not os.path.isdir(args.source_dir):
+        parser.error(f"--source-dir does not exist or is not a directory: {args.source_dir}")
+
+    if args.output_dir is None:
+        results_dir = os.path.join(
+            "data", "results", datetime.now().strftime("%Y-%m-%d %H%M%S")
+        )
+    else:
+        results_dir = args.output_dir
 
     run(
         source_dir=args.source_dir,
-        results_base=args.results_dir,
+        results_dir=results_dir,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
     )
