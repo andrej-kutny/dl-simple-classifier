@@ -1,14 +1,15 @@
 import os
 import argparse
-import numpy as np
-import keras
-from keras import layers
-from tensorflow import data as tf_data
-import matplotlib.pyplot as plt
 from datetime import datetime
 
 
 def run(source_dir, results_base, epochs, learning_rate):
+    import numpy as np
+    import keras
+    from keras import layers
+    from tensorflow import data as tf_data
+    import matplotlib.pyplot as plt
+
     run_ts = datetime.now().strftime("%Y-%m-%d %H%M%S")
     results_dir = os.path.join(results_base, run_ts)
     img_dir = os.path.join(results_dir, "img")
