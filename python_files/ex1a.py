@@ -1,6 +1,7 @@
 import os
 import argparse
 from datetime import datetime
+import random
 
 
 def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_split, seed):
@@ -259,8 +260,8 @@ if __name__ == "__main__":
                         help="Path to the image dataset directory (default: cat_and_dog_images)")
     parser.add_argument("-o", "--output-dir", default=None,
                         help="Directory for run outputs (default: data/results/YYYY-MM-DD HHMMSS)")
-    parser.add_argument("-e", "--epochs", type=positive_int, default=1,
-                        help="Number of training epochs, must be > 0 (default: 1)")
+    parser.add_argument("-e", "--epochs", type=positive_int, default=50,
+                        help="Number of training epochs, must be > 0 (default: 50)")
     parser.add_argument("-l", "--learning-rate", type=positive_perc, default=0.0001,
                         help="Adam learning rate, must be in (0, 1) (default: 0.0001)")
     parser.add_argument("-b", "--batch-size", type=positive_int, default=50,
@@ -274,10 +275,17 @@ if __name__ == "__main__":
     if not os.path.isdir(args.source_dir):
         parser.error(f"--source-dir does not exist or is not a directory: {args.source_dir}")
 
+    if args.seed is None:
+        seed = random.randint(0, 2**31 - 1)
+        print(f"Using random seed: {seed}")
+    else:
+        seed = args.seed
+
     if args.output_dir is None:
         results_dir = os.path.join(
             "data", "results", datetime.now().strftime("%Y-%m-%d %H%M%S")
         )
+        print(f"Using output directory: {results_dir}")
     else:
         results_dir = args.output_dir
 
@@ -288,5 +296,5 @@ if __name__ == "__main__":
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
         validation_split=args.validation_split,
-        seed=args.seed,
+        seed=seed,
     )
