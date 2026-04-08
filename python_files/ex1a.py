@@ -186,7 +186,7 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
             ax1.set_title("Accuracy convergence")
             ax1.legend()
 
-            ax2.plot(epochs_range, train_loss, color="lightcoral", label="Train loss")
+            ax2.plot(epochs_range, train_loss, color="lightred", label="Train loss")
             ax2.plot(epochs_range, val_loss,   color="red",        label="Val loss")
             ax2.set_xlabel("Epoch")
             ax2.set_ylabel("Loss")
@@ -199,7 +199,11 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
 
     # Train the model
     callbacks = [
-        keras.callbacks.ModelCheckpoint(os.path.join(model_dir, "save_at_{epoch}.keras")),
+        keras.callbacks.ModelCheckpoint(
+            filepath=os.path.join(model_dir, "checkpoint_{epoch}.keras"),
+            monitor='val_accuracy',
+            mode='max',
+            save_best_only=True),
         EpochLogCallback(
             log_path=os.path.join(results_dir, "epochs.json"),
             convergence_path=os.path.join(img_dir, "convergence.png"),
