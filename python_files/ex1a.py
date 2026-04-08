@@ -186,7 +186,7 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
             ax1.set_title("Accuracy convergence")
             ax1.legend()
 
-            ax2.plot(epochs_range, train_loss, color="lightred", label="Train loss")
+            ax2.plot(epochs_range, train_loss, color="lightcoral", label="Train loss")
             ax2.plot(epochs_range, val_loss,   color="red",        label="Val loss")
             ax2.set_xlabel("Epoch")
             ax2.set_ylabel("Loss")
@@ -201,7 +201,7 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
     callbacks = [
         keras.callbacks.ModelCheckpoint(
             filepath=os.path.join(model_dir, "checkpoint_{epoch}.keras"),
-            monitor='val_accuracy',
+            monitor='val_acc',
             mode='max',
             save_best_only=True),
         EpochLogCallback(
@@ -323,30 +323,25 @@ if __name__ == "__main__":
         parser.error(f"--source-dir does not exist or is not a directory: {args.source_dir}")
 
     if args.seed is None:
-        seed = random.randint(0, 2**31 - 1)
-        print(f"Using random seed: {seed}")
-    else:
-        seed = args.seed
-
+        args.seed = random.randint(0, 2**31 - 1)
+        print(f"Using random seed: {args.seed}")
+    
     if args.output_dir is None:
-        results_dir = os.path.join(
+        args.output_dir = os.path.join(
             "data", "results", datetime.now().strftime("%Y-%m-%d %H%M%S")
         )
-        print(f"Using output directory: {results_dir}")
-    else:
-        results_dir = args.output_dir
+        print(f"Using output directory: {args.output_dir}")
 
-    import json
-    os.makedirs(results_dir, exist_ok=True)
-    with open(os.path.join(results_dir, "args.json"), "w") as f:
+    os.makedirs(args.output_dir, exist_ok=True)
+    with open(os.path.join(args.output_dir, "args.json"), "w") as f:
         json.dump(args.__dict__, f, indent=2)
 
     run(
         source_dir=args.source_dir,
-        results_dir=results_dir,
+        results_dir=args.output_dir,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
         validation_split=args.validation_split,
-        seed=seed,
+        seed=args.seed,
     )
