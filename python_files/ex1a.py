@@ -3,7 +3,7 @@ import argparse
 from datetime import datetime
 
 
-def run(source_dir, results_dir, epochs, learning_rate):
+def run(source_dir, results_dir, epochs, learning_rate, batch_size):
     import numpy as np
     import keras
     from keras import layers
@@ -34,7 +34,6 @@ def run(source_dir, results_dir, epochs, learning_rate):
     print(f"Deleted {num_skipped} images.")
 
     image_size = (180, 180)
-    batch_size = 128
 
     # Generate a Dataset
     train_ds, val_ds = keras.utils.image_dataset_from_directory(
@@ -211,6 +210,8 @@ if __name__ == "__main__":
                         help="Number of training epochs, must be > 0 (default: 1)")
     parser.add_argument("-l", "--learning-rate", type=positive_float, default=0.0001,
                         help="Adam learning rate, must be in (0, 1) (default: 0.0001)")
+    parser.add_argument("-b", "--batch-size", type=positive_int, default=128,
+                        help="Training batch size, must be > 0 (default: 128)")
     args = parser.parse_args()
 
     if not os.path.isdir(args.source_dir):
@@ -228,4 +229,5 @@ if __name__ == "__main__":
         results_dir=results_dir,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
+        batch_size=args.batch_size,
     )
