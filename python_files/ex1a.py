@@ -2,13 +2,16 @@ import os
 import argparse
 from datetime import datetime
 import random
-
+import json
+import time
 
 def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_split, seed):
     import numpy as np
     import keras
     from keras import layers
     from tensorflow import data as tf_data
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     img_dir = os.path.join(results_dir, "img")
@@ -132,35 +135,75 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
     model = make_model(input_shape=image_size + (3,), num_classes=2)
     keras.utils.plot_model(model, to_file=os.path.join(img_dir, "model_architecture.png"), show_shapes=True)
 
-    class ConvergencePlotCallback(keras.callbacks.Callback):
+    class EpochLogCallback(keras.callbacks.Callback):
+        def __init__(self, log_path, convergence_path):
+            super().__init__()
+            self._log_path = log_path
+            self._convergence_path = convergence_path
+            self._epoch_start_ts = None
+            self._epoch_start_mono = None
+            with open(self._log_path, "w") as f:
+                json.dump({}, f)
+
+        def on_epoch_begin(self, epoch, logs=None):
+            self._epoch_start_ts = datetime.now().isoformat()
+            self._epoch_start_mono = time.monotonic()
+
         def on_epoch_end(self, epoch, logs=None):
-            h = self.model.history.history
-            epochs_range = range(1, len(h["acc"]) + 1)
+            elapsed = time.monotonic() - self._epoch_start_mono
+
+            # Update epochs.json
+            with open(self._log_path, "r+") as f:
+                data = json.load(f)
+                data[epoch + 1] = {
+                    "start": self._epoch_start_ts,
+                    "end": datetime.now().isoformat(),
+                    "elapsed_seconds": round(elapsed, 3),
+                    "vals": {
+                        "train_loss": logs.get("loss"),
+                        "val_loss": logs.get("val_loss"),
+                        "train_acc": logs.get("acc"),
+                        "val_acc": logs.get("val_acc"),
+                    },
+                }
+                f.seek(0)
+                json.dump(data, f, indent=2)
+                f.truncate()
+
+            # Update convergence plot from the same data
+            epochs_range = list(data.keys())
+            train_acc = [data[e]["vals"]["train_acc"] for e in epochs_range]
+            val_acc   = [data[e]["vals"]["val_acc"]   for e in epochs_range]
+            train_loss = [data[e]["vals"]["train_loss"] for e in epochs_range]
+            val_loss   = [data[e]["vals"]["val_loss"]   for e in epochs_range]
 
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-            ax1.plot(epochs_range, h["acc"], color="lightgreen", label="Train accuracy")
-            ax1.plot(epochs_range, h["val_acc"], color="green", label="Val accuracy")
+            ax1.plot(epochs_range, train_acc, color="lightgreen", label="Train accuracy")
+            ax1.plot(epochs_range, val_acc,   color="green",      label="Val accuracy")
             ax1.set_xlabel("Epoch")
             ax1.set_ylabel("Accuracy")
             ax1.set_title("Accuracy convergence")
             ax1.legend()
 
-            ax2.plot(epochs_range, h["loss"], color="lightcoral", label="Train loss")
-            ax2.plot(epochs_range, h["val_loss"], color="red", label="Val loss")
+            ax2.plot(epochs_range, train_loss, color="lightcoral", label="Train loss")
+            ax2.plot(epochs_range, val_loss,   color="red",        label="Val loss")
             ax2.set_xlabel("Epoch")
             ax2.set_ylabel("Loss")
             ax2.set_title("Loss convergence")
             ax2.legend()
 
             fig.tight_layout()
-            fig.savefig(os.path.join(img_dir, "convergence.png"))
+            fig.savefig(self._convergence_path)
             plt.close(fig)
 
     # Train the model
     callbacks = [
         keras.callbacks.ModelCheckpoint(os.path.join(model_dir, "save_at_{epoch}.keras")),
-        ConvergencePlotCallback(),
+        EpochLogCallback(
+            log_path=os.path.join(results_dir, "epochs.json"),
+            convergence_path=os.path.join(img_dir, "convergence.png"),
+        ),
     ]
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate),
@@ -288,6 +331,11 @@ if __name__ == "__main__":
         print(f"Using output directory: {results_dir}")
     else:
         results_dir = args.output_dir
+
+    import json
+    os.makedirs(results_dir, exist_ok=True)
+    with open(os.path.join(results_dir, "args.json"), "w") as f:
+        json.dump(args.__dict__, f, indent=2)
 
     run(
         source_dir=args.source_dir,
