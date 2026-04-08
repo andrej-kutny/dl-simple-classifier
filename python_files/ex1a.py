@@ -181,11 +181,13 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
                 self.model.save(os.path.join(self._model_dir, f"checkpoint_{epoch + 1}.keras"))
 
             # Update convergence plot from the same data
-            epochs_range = list(data.keys())
-            train_acc  = [data[e]["vals"]["train_acc"]  for e in epochs_range]
-            val_acc    = [data[e]["vals"]["val_acc"]    for e in epochs_range]
-            train_loss = [data[e]["vals"]["train_loss"] for e in epochs_range]
-            val_loss   = [data[e]["vals"]["val_loss"]   for e in epochs_range]
+            epochs_range, train_acc, val_acc, train_loss, val_loss = [], [], [], [], []
+            for e, v in data.items():
+                epochs_range.append(int(e))
+                train_acc.append(v["vals"]["train_acc"])
+                val_acc.append(v["vals"]["val_acc"])
+                train_loss.append(v["vals"]["train_loss"])
+                val_loss.append(v["vals"]["val_loss"])
 
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -193,17 +195,17 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
             ax1.plot(epochs_range, val_acc,   color="green",      label="Val accuracy")
 
             # Dashed line connecting best val_acc checkpoints
-            if len(self._best_checkpoints) > 1:
+            if self._best_checkpoints:
                 best_epochs = [p[0] for p in self._best_checkpoints]
                 best_accs   = [p[1] for p in self._best_checkpoints]
                 ax1.plot(best_epochs, best_accs, color="green", linewidth=0.8,
-                         linestyle="--", label="_nolegend_")
-            for ckpt_epoch, ckpt_acc in self._best_checkpoints:
-                ax1.plot(ckpt_epoch, ckpt_acc, "o", color="green", markersize=5)
-                ax1.annotate(f"{ckpt_epoch}: {ckpt_acc:.4f}",
-                             xy=(ckpt_epoch, ckpt_acc),
-                             xytext=(4, 4), textcoords="offset points",
-                             fontsize=7, color="green")
+                         linestyle="--", label="Best checkpoints")
+                for ckpt_epoch, ckpt_acc in self._best_checkpoints:
+                    ax1.plot(ckpt_epoch, ckpt_acc, "o", color="green", markersize=5)
+                    ax1.annotate(f"{ckpt_epoch}: {ckpt_acc:.5f}",
+                                 xy=(ckpt_epoch, ckpt_acc),
+                                 xytext=(4, 4), textcoords="offset points",
+                                 fontsize=7, color="green")
 
             ax1.set_xlabel("Epoch")
             ax1.set_ylabel("Accuracy")
