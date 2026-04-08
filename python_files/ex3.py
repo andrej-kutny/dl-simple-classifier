@@ -11,7 +11,7 @@ from shared import (
 def run(model_path, source_dir, results_dir, epochs, learning_rate, batch_size, validation_split, seed):
     ctx = setup(results_dir)
 
-    # ex1a-specific: filter corrupted images
+    # Filter corrupted images
     num_skipped = 0
     for folder_name in ("Cat", "Dog"):
         folder_path = os.path.join(source_dir, folder_name)
@@ -30,7 +30,7 @@ def run(model_path, source_dir, results_dir, epochs, learning_rate, batch_size, 
     train_ds, val_ds, class_names, num_classes, data_aug = load_and_visualize(
         ctx, source_dir, validation_split, seed, batch_size)
 
-    model = load_and_adapt_model(ctx, model_path, num_classes, reinit_conv=0)
+    model = load_and_adapt_model(ctx, model_path, num_classes, reinit_conv=2)
 
     train(ctx, model, train_ds, val_ds, epochs, learning_rate, num_classes, results_dir)
     evaluate(ctx, model, val_ds, class_names, num_classes)
@@ -38,6 +38,6 @@ def run(model_path, source_dir, results_dir, epochs, learning_rate, batch_size, 
 
 
 if __name__ == "__main__":
-    args = resolve_args(make_transfer_parser("Ex2: Transfer learning — replace output layer only"))
+    args = resolve_args(make_transfer_parser("Ex3: Transfer learning — replace output + first two conv layers"))
     run(args.model, args.source_dir, args.output_dir, args.epochs, args.learning_rate,
         args.batch_size, args.validation_split, args.seed)

@@ -57,7 +57,7 @@ def load_and_visualize(ctx, source_dir, validation_split, seed, batch_size):
     # Sample images
     plt.figure(figsize=(10, 10))
     for images, labels in train_ds.take(1):
-        for i in range(9):
+        for i in range(min(9, len(images))):
             ax = plt.subplot(3, 3, i + 1)
             plt.imshow(np.array(images[i]).astype("uint8"))
             plt.title(class_names[int(labels[i])], fontsize=7)
@@ -79,7 +79,7 @@ def load_and_visualize(ctx, source_dir, validation_split, seed, batch_size):
     # Augmented images
     plt.figure(figsize=(10, 10))
     for images, _ in train_ds.take(1):
-        for i in range(9):
+        for i in range(min(9, len(images))):
             augmented_images = data_augmentation(images)
             ax = plt.subplot(3, 3, i + 1)
             plt.imshow(np.array(augmented_images[0]).astype("uint8"))
@@ -144,6 +144,56 @@ def make_model(ctx, num_classes, data_augmentation=None):
     x = layers.Dropout(0.25)(x)
     outputs = layers.Dense(units, activation=None)(x)
     model = keras.Model(inputs, outputs)
+
+    keras.utils.plot_model(model, to_file=os.path.join(img_dir, "model_architecture.png"), show_shapes=True)
+    return model
+
+
+def load_and_adapt_model(ctx, model_path, num_classes, reinit_conv=0):
+    """Load a saved .keras model and adapt it for a new task.
+
+    Args:
+        ctx: context dict from setup()
+        model_path: path to the .keras model file
+        num_classes: number of classes for the new task
+        reinit_conv: 0 = keep all weights, >0 = reinit first N conv layers,
+                     <0 = reinit last N conv layers
+    """
+    keras = ctx["keras"]
+    layers = ctx["layers"]
+    img_dir = ctx["img_dir"]
+
+    base_model = keras.saving.load_model(model_path)
+
+    # Identify all conv layers by name (Conv2D and SeparableConv2D)
+    conv_names = [
+        layer.name for layer in base_model.layers
+        if isinstance(layer, (layers.Conv2D, layers.SeparableConv2D))
+    ]
+
+    # Determine which conv layers to reinitialize
+    if reinit_conv > 0:
+        reinit_names = set(conv_names[:reinit_conv])
+    elif reinit_conv < 0:
+        reinit_names = set(conv_names[reinit_conv:])
+    else:
+        reinit_names = set()
+
+    # Build new model: same architecture, new output layer
+    x = base_model.layers[-2].output  # dropout output
+    units = 1 if num_classes == 2 else num_classes
+    outputs = layers.Dense(units, activation=None, name="output_dense")(x)
+    model = keras.Model(base_model.input, outputs)
+
+    # Reinitialize selected conv layers by name
+    for layer in model.layers:
+        if layer.name in reinit_names:
+            print(f"Reinitializing layer: {layer.name} ({layer.__class__.__name__})")
+            for w in layer.weights:
+                if "kernel" in w.name:
+                    w.assign(keras.initializers.GlorotUniform()(w.shape))
+                elif "bias" in w.name:
+                    w.assign(keras.initializers.Zeros()(w.shape))
 
     keras.utils.plot_model(model, to_file=os.path.join(img_dir, "model_architecture.png"), show_shapes=True)
     return model
@@ -290,9 +340,8 @@ def _positive_perc(value):
     return v
 
 
-def make_parser(description, default_source_dir):
-    """Create an ArgumentParser with all shared training arguments."""
-    parser = argparse.ArgumentParser(description=description)
+def _add_common_args(parser, default_source_dir):
+    """Add training arguments shared by all experiments."""
     parser.add_argument("-s", "--source-dir", default=default_source_dir,
                         help=f"Path to the image dataset directory (default: {default_source_dir})")
     parser.add_argument("-o", "--output-dir", default=None,
@@ -307,6 +356,20 @@ def make_parser(description, default_source_dir):
                         help="Fraction of data to use for validation, must be in (0, 1) (default: 0.2)")
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed for dataset split, None means random (default: None)")
+
+
+def make_parser(description, default_source_dir):
+    """Create an ArgumentParser with all shared training arguments."""
+    parser = argparse.ArgumentParser(description=description)
+    _add_common_args(parser, default_source_dir)
+    return parser
+
+
+def make_transfer_parser(description, default_source_dir="data/cat_and_dog_images"):
+    """Create an ArgumentParser for transfer learning experiments (ex2/3/4)."""
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("model", help="Path to the pre-trained .keras model file")
+    _add_common_args(parser, default_source_dir)
     return parser
 
 
@@ -316,6 +379,9 @@ def resolve_args(parser):
 
     if not os.path.isdir(args.source_dir):
         parser.error(f"--source-dir does not exist or is not a directory: {args.source_dir}")
+
+    if hasattr(args, "model") and not os.path.isfile(args.model):
+        parser.error(f"model file does not exist: {args.model}")
 
     if args.seed is None:
         args.seed = random.randint(0, 2**31 - 1)
