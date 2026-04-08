@@ -1,9 +1,12 @@
 import os
+import sys
 import argparse
 from datetime import datetime
 import random
 import json
-import time
+
+sys.path.insert(0, os.path.dirname(__file__))
+from callbacks import make_epoch_log_callback
 
 def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_split, seed):
     import numpy as np
@@ -49,13 +52,15 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
         batch_size=batch_size,
     )
 
+    class_names = train_ds.class_names
+
     # Visualize the data
     plt.figure(figsize=(10, 10))
     for images, labels in train_ds.take(1):
         for i in range(9):
             ax = plt.subplot(3, 3, i + 1)
             plt.imshow(np.array(images[i]).astype("uint8"))
-            plt.title(int(labels[i]))
+            plt.title(class_names[int(labels[i])])
             plt.axis("off")
     plt.savefig(os.path.join(img_dir, "sample_images.png"))
     plt.close()
@@ -135,97 +140,11 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
     model = make_model(input_shape=image_size + (3,), num_classes=2)
     keras.utils.plot_model(model, to_file=os.path.join(img_dir, "model_architecture.png"), show_shapes=True)
 
-    class EpochLogCallback(keras.callbacks.Callback):
-        def __init__(self, log_path, convergence_path, model_dir):
-            super().__init__()
-            self._log_path = log_path
-            self._convergence_path = convergence_path
-            self._model_dir = model_dir
-            self._best_val_acc = -1
-            self._best_checkpoints = []  # list of (epoch, val_acc)
-            self._epoch_start_ts = None
-            self._epoch_start_mono = None
-            with open(self._log_path, "w") as f:
-                json.dump({}, f)
-
-        def on_epoch_begin(self, epoch, logs=None):
-            self._epoch_start_ts = datetime.now().isoformat()
-            self._epoch_start_mono = time.monotonic()
-
-        def on_epoch_end(self, epoch, logs=None):
-            elapsed = time.monotonic() - self._epoch_start_mono
-
-            # Update epochs.json
-            with open(self._log_path, "r+") as f:
-                data = json.load(f)
-                data[epoch + 1] = {
-                    "start": self._epoch_start_ts,
-                    "end": datetime.now().isoformat(),
-                    "elapsed_seconds": round(elapsed, 3),
-                    "vals": {
-                        "train_loss": logs.get("loss"),
-                        "val_loss": logs.get("val_loss"),
-                        "train_acc": logs.get("acc"),
-                        "val_acc": logs.get("val_acc"),
-                    },
-                }
-                f.seek(0)
-                json.dump(data, f, indent=2)
-                f.truncate()
-
-            # Save best model by val_acc
-            val_acc_cur = logs.get("val_acc", -1)
-            if val_acc_cur > self._best_val_acc:
-                self._best_val_acc = val_acc_cur
-                self._best_checkpoints.append((epoch + 1, val_acc_cur))
-                self.model.save(os.path.join(self._model_dir, f"checkpoint_{epoch + 1}.keras"))
-
-            # Update convergence plot from the same data
-            epochs_range, train_acc, val_acc, train_loss, val_loss = [], [], [], [], []
-            for e, v in data.items():
-                epochs_range.append(int(e))
-                train_acc.append(v["vals"]["train_acc"])
-                val_acc.append(v["vals"]["val_acc"])
-                train_loss.append(v["vals"]["train_loss"])
-                val_loss.append(v["vals"]["val_loss"])
-
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-
-            ax1.plot(epochs_range, train_acc, color="lightgreen", label="Train accuracy")
-            ax1.plot(epochs_range, val_acc,   color="green",      label="Val accuracy")
-
-            # Dashed line connecting best val_acc checkpoints
-            if self._best_checkpoints:
-                best_epochs = [p[0] for p in self._best_checkpoints]
-                best_accs   = [p[1] for p in self._best_checkpoints]
-                ax1.plot(best_epochs, best_accs, color="green", linewidth=0.8,
-                         linestyle="--", label="Best checkpoints")
-                for ckpt_epoch, ckpt_acc in self._best_checkpoints:
-                    ax1.plot(ckpt_epoch, ckpt_acc, "o", color="green", markersize=5)
-                    ax1.annotate(f"{ckpt_epoch}: {ckpt_acc:.5f}",
-                                 xy=(ckpt_epoch, ckpt_acc),
-                                 xytext=(4, 4), textcoords="offset points",
-                                 fontsize=7, color="green")
-
-            ax1.set_xlabel("Epoch")
-            ax1.set_ylabel("Accuracy")
-            ax1.set_title("Accuracy convergence")
-            ax1.legend()
-
-            ax2.plot(epochs_range, train_loss, color="lightcoral", label="Train loss")
-            ax2.plot(epochs_range, val_loss,   color="red",        label="Val loss")
-            ax2.set_xlabel("Epoch")
-            ax2.set_ylabel("Loss")
-            ax2.set_title("Loss convergence")
-            ax2.legend()
-
-            fig.tight_layout()
-            fig.savefig(self._convergence_path)
-            plt.close(fig)
-
     # Train the model
     callbacks = [
-        EpochLogCallback(
+        make_epoch_log_callback(
+            keras=keras,
+            plt=plt,
             log_path=os.path.join(results_dir, "epochs.json"),
             convergence_path=os.path.join(img_dir, "convergence.png"),
             model_dir=model_dir,
@@ -256,7 +175,6 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_s
 
     all_labels = np.array(all_labels)
     all_preds = np.array(all_preds)
-    class_names = ["Cat", "Dog"]
     cm = np.zeros((2, 2), dtype=int)
     for true, pred in zip(all_labels, all_preds):
         cm[int(true)][int(pred)] += 1
@@ -326,8 +244,8 @@ def positive_perc(value):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a cat/dog classifier")
-    parser.add_argument("-s", "--source-dir", default="cat_and_dog_images",
-                        help="Path to the image dataset directory (default: cat_and_dog_images)")
+    parser.add_argument("-s", "--source-dir", default="data/cat_and_dog_images",
+                        help="Path to the image dataset directory (default: data/cat_and_dog_images)")
     parser.add_argument("-o", "--output-dir", default=None,
                         help="Directory for run outputs (default: data/results/YYYY-MM-DD HHMMSS)")
     parser.add_argument("-e", "--epochs", type=positive_int, default=50,
