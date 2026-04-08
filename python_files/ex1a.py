@@ -3,7 +3,7 @@ import argparse
 from datetime import datetime
 
 
-def run(source_dir, results_dir, epochs, learning_rate, batch_size):
+def run(source_dir, results_dir, epochs, learning_rate, batch_size, validation_split, seed):
     import numpy as np
     import keras
     from keras import layers
@@ -38,9 +38,9 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size):
     # Generate a Dataset
     train_ds, val_ds = keras.utils.image_dataset_from_directory(
         source_dir,
-        validation_split=0.2,
+        validation_split=validation_split,
         subset="both",
-        seed=1337,
+        seed=seed,
         image_size=image_size,
         batch_size=batch_size,
     )
@@ -129,60 +129,113 @@ def run(source_dir, results_dir, epochs, learning_rate, batch_size):
         return keras.Model(inputs, outputs)
 
     model = make_model(input_shape=image_size + (3,), num_classes=2)
-    keras.utils.plot_model(model, to_file=os.path.join(model_dir, "model_architecture.png"), show_shapes=True)
+    keras.utils.plot_model(model, to_file=os.path.join(img_dir, "model_architecture.png"), show_shapes=True)
+
+    class ConvergencePlotCallback(keras.callbacks.Callback):
+        def on_epoch_end(self, epoch, logs=None):
+            h = self.model.history.history
+            epochs_range = range(1, len(h["acc"]) + 1)
+
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+            ax1.plot(epochs_range, h["acc"], color="lightgreen", label="Train accuracy")
+            ax1.plot(epochs_range, h["val_acc"], color="green", label="Val accuracy")
+            ax1.set_xlabel("Epoch")
+            ax1.set_ylabel("Accuracy")
+            ax1.set_title("Accuracy convergence")
+            ax1.legend()
+
+            ax2.plot(epochs_range, h["loss"], color="lightcoral", label="Train loss")
+            ax2.plot(epochs_range, h["val_loss"], color="red", label="Val loss")
+            ax2.set_xlabel("Epoch")
+            ax2.set_ylabel("Loss")
+            ax2.set_title("Loss convergence")
+            ax2.legend()
+
+            fig.tight_layout()
+            fig.savefig(os.path.join(img_dir, "convergence.png"))
+            plt.close(fig)
 
     # Train the model
     callbacks = [
         keras.callbacks.ModelCheckpoint(os.path.join(model_dir, "save_at_{epoch}.keras")),
+        ConvergencePlotCallback(),
     ]
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate),
         loss=keras.losses.BinaryCrossentropy(from_logits=True),
         metrics=[keras.metrics.BinaryAccuracy(name="acc")],
     )
-    history = model.fit(
+    model.fit(
         train_ds,
         epochs=epochs,
         callbacks=callbacks,
         validation_data=val_ds,
     )
 
-    # Convergence plot
-    plt.figure(figsize=(12, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(history.history["acc"], label="Train accuracy")
-    plt.plot(history.history["val_acc"], label="Val accuracy")
-    plt.xlabel("Epoch")
-    plt.ylabel("Accuracy")
-    plt.title("Accuracy convergence")
-    plt.legend()
+    # Confusion matrix on validation set
+    all_labels = []
+    all_preds = []
+    for images, labels in val_ds:
+        logits = model.predict(images, verbose=0)
+        scores = keras.ops.sigmoid(logits[:, 0])
+        preds = (np.array(scores) >= 0.5).astype(int)
+        all_labels.extend(np.array(labels).tolist())
+        all_preds.extend(preds.tolist())
 
-    plt.subplot(1, 2, 2)
-    plt.plot(history.history["loss"], label="Train loss")
-    plt.plot(history.history["val_loss"], label="Val loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Loss convergence")
-    plt.legend()
+    all_labels = np.array(all_labels)
+    all_preds = np.array(all_preds)
+    class_names = ["Cat", "Dog"]
+    cm = np.zeros((2, 2), dtype=int)
+    for true, pred in zip(all_labels, all_preds):
+        cm[int(true)][int(pred)] += 1
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(img_dir, "convergence.png"))
-    plt.close()
+    fig, ax = plt.subplots(figsize=(5, 5))
+    im = ax.imshow(cm, cmap="Blues")
+    fig.colorbar(im)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+    ax.set_xticklabels(class_names)
+    ax.set_yticklabels(class_names)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    ax.set_title("Confusion matrix (validation)")
+    for i in range(2):
+        for j in range(2):
+            ax.text(j, i, str(cm[i, j]), ha="center", va="center",
+                    color="white" if cm[i, j] > cm.max() / 2 else "black")
+    fig.tight_layout()
+    fig.savefig(os.path.join(img_dir, "confusion_matrix.png"))
+    plt.close(fig)
 
-    # Run inference on new data
-    sample_img_path = os.path.join(source_dir, "Cat", "6779.jpg")
-    img = keras.utils.load_img(sample_img_path, target_size=image_size)
-    plt.figure()
-    plt.imshow(img)
-    plt.savefig(os.path.join(img_dir, "inference_sample.png"))
-    plt.close()
+    # Sample predictions grid on validation set
+    fig, axes = plt.subplots(3, 3, figsize=(10, 10))
+    axes = axes.flatten()
+    shown = 0
+    for images, labels in val_ds:
+        if shown >= 9:
+            break
+        logits = model.predict(images, verbose=0)
+        scores = keras.ops.sigmoid(logits[:, 0])
+        for i in range(len(images)):
+            if shown >= 9:
+                break
+            score = float(scores[i])
+            true_label = class_names[int(labels[i])]
+            pred_label = class_names[int(score >= 0.5)]
+            confidence = score if score >= 0.5 else 1 - score
+            correct = true_label == pred_label
+            axes[shown].imshow(np.array(images[i]).astype("uint8"))
+            axes[shown].set_title(
+                f"True: {true_label}\nPred: {pred_label} ({confidence:.0%})",
+                color="green" if correct else "red", fontsize=9
+            )
+            axes[shown].axis("off")
+            shown += 1
+    fig.tight_layout()
+    fig.savefig(os.path.join(img_dir, "sample_predictions.png"))
+    plt.close(fig)
 
-    img_array = keras.utils.img_to_array(img)
-    img_array = keras.ops.expand_dims(img_array, 0)  # Create batch axis
-
-    predictions = model.predict(img_array)
-    score = float(keras.ops.sigmoid(predictions[0][0]))
-    print(f"This image is {100 * (1 - score):.2f}% cat and {100 * score:.2f}% dog.")
     print(f"Results saved to: {results_dir}")
 
 
@@ -193,7 +246,7 @@ def positive_int(value):
     return v
 
 
-def positive_float(value):
+def positive_perc(value):
     v = float(value)
     if not (0.0 < v < 1.0):
         raise argparse.ArgumentTypeError(f"learning-rate must be in (0, 1), got {value}")
@@ -208,10 +261,14 @@ if __name__ == "__main__":
                         help="Directory for run outputs (default: data/results/YYYY-MM-DD HHMMSS)")
     parser.add_argument("-e", "--epochs", type=positive_int, default=1,
                         help="Number of training epochs, must be > 0 (default: 1)")
-    parser.add_argument("-l", "--learning-rate", type=positive_float, default=0.0001,
+    parser.add_argument("-l", "--learning-rate", type=positive_perc, default=0.0001,
                         help="Adam learning rate, must be in (0, 1) (default: 0.0001)")
-    parser.add_argument("-b", "--batch-size", type=positive_int, default=128,
-                        help="Training batch size, must be > 0 (default: 128)")
+    parser.add_argument("-b", "--batch-size", type=positive_int, default=50,
+                        help="Training batch size, must be > 0 (default: 50)")
+    parser.add_argument("-v", "--validation-split", type=positive_perc, default=0.2,
+                        help="Fraction of data to use for validation, must be in (0, 1) (default: 0.2)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Random seed for dataset split, None means random (default: None)")
     args = parser.parse_args()
 
     if not os.path.isdir(args.source_dir):
@@ -230,4 +287,6 @@ if __name__ == "__main__":
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
+        validation_split=args.validation_split,
+        seed=args.seed,
     )
