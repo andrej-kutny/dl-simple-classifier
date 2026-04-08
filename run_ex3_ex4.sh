@@ -2,7 +2,7 @@
 #SBATCH --job-name=ex3_ex4
 #SBATCH --output=logs/%j_ex3_ex4.out
 #SBATCH --error=logs/%j_ex3_ex4.err
-#SBATCH --time=0-03:30:00
+#SBATCH --time=0-02:59:59
 #SBATCH --gres=gpu:1
 #SBATCH --partition=priority
 
