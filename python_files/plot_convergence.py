@@ -1,13 +1,17 @@
 """Regenerate convergence plots from an existing epochs.json file.
 
 Usage:
-    python python_files/plot_convergence.py data/results/2026-04-08\ 103742/epochs.json
+    python python_files/plot_convergence.py "data/results/2026-04-08 103742/epochs.json"
     python python_files/plot_convergence.py epochs1.json epochs2.json -o comparison/
 """
 import os
 import sys
 import argparse
 import json
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
 
 sys.path.insert(0, os.path.dirname(__file__))
 from callbacks import parse_epoch_data, plot_accuracy, plot_loss, plot_convergence
@@ -32,10 +36,6 @@ def main():
     parser.add_argument("-o", "--output-dir", default=None,
                         help="Output directory for plots (default: same dir as epochs.json)")
     args = parser.parse_args()
-
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
 
     if len(args.epochs_json) == 1:
         # Single file — regenerate plots in place
@@ -82,9 +82,11 @@ def main():
 
             # Add to comparison plots
             fig_ax_acc = plot_accuracy(plt, epochs_range, train_acc, val_acc,
-                                       label=label, color=color, fig_ax=fig_ax_acc)
+                                       label=label, train_color=color, val_color=color,
+                                       fig_ax=fig_ax_acc)
             fig_ax_loss = plot_loss(plt, epochs_range, train_loss, val_loss,
-                                    label=label, color=color, fig_ax=fig_ax_loss)
+                                    label=label, train_color=color, val_color=color,
+                                    fig_ax=fig_ax_loss)
 
         fig_ax_acc[0].savefig(os.path.join(output_dir, "comparison_accuracy.png"))
         plt.close(fig_ax_acc[0])

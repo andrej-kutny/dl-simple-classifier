@@ -1,5 +1,10 @@
+.cursor/
 .claude/
 .devcontainer/
+report/
+*.zip
+report_figures/
+dl-assignment1-giustacchini-kutny/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -143,9 +148,9 @@ celerybeat.pid
 # Environments
 .env
 .envrc
-.venv
+.venv*
 env/
-venv/
+venv*/
 ENV/
 env.bak/
 venv.bak/

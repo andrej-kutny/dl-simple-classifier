@@ -164,36 +164,40 @@ def load_and_adapt_model(ctx, model_path, num_classes, reinit_conv=0):
     img_dir = ctx["img_dir"]
 
     base_model = keras.saving.load_model(model_path)
+    model = make_model(ctx, num_classes)
 
-    # Identify all conv layers by name (Conv2D and SeparableConv2D)
-    conv_names = [
-        layer.name for layer in base_model.layers
+    assert len(base_model.layers) == len(model.layers), (
+        f"layer count mismatch: base={len(base_model.layers)} new={len(model.layers)}"
+    )
+
+    conv_indices = [
+        i for i, layer in enumerate(model.layers)
         if isinstance(layer, (layers.Conv2D, layers.SeparableConv2D))
     ]
-
-    # Determine which conv layers to reinitialize
     if reinit_conv > 0:
-        reinit_names = set(conv_names[:reinit_conv])
+        reinit_indices = set(conv_indices[:reinit_conv])
     elif reinit_conv < 0:
-        reinit_names = set(conv_names[reinit_conv:])
+        reinit_indices = set(conv_indices[reinit_conv:])
     else:
-        reinit_names = set()
+        reinit_indices = set()
 
-    # Build new model: same architecture, new output layer
-    x = base_model.layers[-2].output  # dropout output
-    units = 1 if num_classes == 2 else num_classes
-    outputs = layers.Dense(units, activation=None, name="output_dense")(x)
-    model = keras.Model(base_model.input, outputs)
+    final_dense_idx = len(model.layers) - 1
 
-    # Reinitialize selected conv layers by name
-    for layer in model.layers:
-        if layer.name in reinit_names:
-            print(f"Reinitializing layer: {layer.name} ({layer.__class__.__name__})")
-            for w in layer.weights:
-                if "kernel" in w.name:
-                    w.assign(keras.initializers.GlorotUniform()(w.shape))
-                elif "bias" in w.name:
-                    w.assign(keras.initializers.Zeros()(w.shape))
+    for i, (src, dst) in enumerate(zip(base_model.layers, model.layers)):
+        if i == final_dense_idx:
+            print(f"New classification head: {dst.name} ({dst.__class__.__name__}), units={dst.units}")
+            continue
+        if i in reinit_indices:
+            print(f"Reinitializing layer: {dst.name} ({dst.__class__.__name__})")
+            continue
+        if not src.weights:
+            continue
+        src_shapes = [tuple(w.shape) for w in src.weights]
+        dst_shapes = [tuple(w.shape) for w in dst.weights]
+        if src_shapes != dst_shapes:
+            print(f"Skipping {dst.name}: shape mismatch {src_shapes} vs {dst_shapes}")
+            continue
+        dst.set_weights(src.get_weights())
 
     keras.utils.plot_model(model, to_file=os.path.join(img_dir, "model_architecture.png"), show_shapes=True)
     return model

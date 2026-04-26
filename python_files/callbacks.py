@@ -41,7 +41,7 @@ def plot_accuracy(plt, epochs_range, train_acc, val_acc, best_checkpoints=None,
             ax.plot(ckpt_epoch, ckpt_acc, "o", color=val_color, markersize=5)
             ax.annotate(f"{ckpt_epoch}: {ckpt_acc:.5f}",
                         xy=(ckpt_epoch, ckpt_acc),
-                        xytext=(4, 4), textcoords="offset points",
+                        xytext=(0, 6), textcoords="offset points", rotation=45,
                         fontsize=7, color=val_color)
 
     ax.set_xlabel("Epoch")
