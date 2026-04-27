@@ -244,7 +244,6 @@ def train(ctx, model, train_ds, val_ds, epochs, learning_rate, num_classes, resu
 def evaluate(ctx, model, val_ds, class_names, num_classes):
     """Generate confusion matrix and sample predictions plots."""
     np = ctx["np"]
-    keras = ctx["keras"]
     plt = ctx["plt"]
     img_dir = ctx["img_dir"]
 
@@ -253,13 +252,14 @@ def evaluate(ctx, model, val_ds, class_names, num_classes):
     all_preds = []
     all_probs = []
     for images, labels in val_ds:
-        logits = model.predict(images, verbose=0)
+        logits = np.asarray(model.predict(images, verbose=0))
         if num_classes == 2:
-            scores = np.array(keras.ops.sigmoid(logits[:, 0]))
+            scores = 1.0 / (1.0 + np.exp(-logits[:, 0]))
             preds = (scores >= 0.5).astype(int)
             probs = np.column_stack([1 - scores, scores])
         else:
-            probs = np.array(keras.ops.softmax(logits))
+            exp_l = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
+            probs = exp_l / np.sum(exp_l, axis=-1, keepdims=True)
             preds = np.argmax(probs, axis=1)
         all_labels.extend(np.array(labels).tolist())
         all_preds.extend(preds.tolist())
@@ -301,13 +301,14 @@ def evaluate(ctx, model, val_ds, class_names, num_classes):
     for images, labels in val_ds:
         if shown >= 9:
             break
-        logits = model.predict(images, verbose=0)
+        logits = np.asarray(model.predict(images, verbose=0))
         if num_classes == 2:
-            scores = np.array(keras.ops.sigmoid(logits[:, 0]))
+            scores = 1.0 / (1.0 + np.exp(-logits[:, 0]))
             pred_classes = (scores >= 0.5).astype(int)
             confidences = np.where(scores >= 0.5, scores, 1 - scores)
         else:
-            probs = np.array(keras.ops.softmax(logits))
+            exp_l = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
+            probs = exp_l / np.sum(exp_l, axis=-1, keepdims=True)
             pred_classes = np.argmax(probs, axis=1)
             confidences = np.max(probs, axis=1)
         for i in range(len(images)):
